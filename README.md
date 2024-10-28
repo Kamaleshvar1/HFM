@@ -13,6 +13,6 @@ A web-based system to monitor food attendance in hostels. This application allow
 
 - **Frontend**: HTML, CSS, JavaScript
 - **Backend**: Flask (Python)
-- **Database**: PostgreSQL
+- **Database**: SQLite
 - **QR Code Generation**: `qrcode` package in Python
 
