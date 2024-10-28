@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f4f8;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            color: #007bff;
+            margin-bottom: 20px;
+        }
+
+        /* Navigation Bar Styles */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #007bff;
+            padding: 15px 30px;
+            color: white;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .navbar a {
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .navbar a:hover {
+            background-color: #0056b3;
+        }
+
+        .navbar form {
+            margin: 0; /* Prevents margin issues with button */
+        }
+
+        /* Table Styles */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            border-radius: 10px;
+            overflow: hidden; /* Rounded corners */
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+            transition: background-color 0.2s;
+        }
+
+        th {
+            background-color: #007bff;
+            color: white;
+            text-transform: uppercase;
+            font-size: 0.9em;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1; /* Hover effect */
+        }
+
+        /* Button Styles */
+        button {
+            padding: 8px 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        /* Responsive Styles */
+        @media (max-width: 768px) {
+            .navbar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .navbar a {
+                margin-bottom: 10px;
+            }
+
+            table {
+                font-size: 0.9em; /* Slightly smaller text for smaller screens */
+            }
+        }
+
+        /* Additional Styles for Headings */
+        h2 {
+            margin-top: 30px;
+            color: #007bff;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <div>
+            <a href="/admin_panel">Dashboard</a>
+            <a href="/attendance_records">Attendance Records</a>
+            <a href="/users">Users</a>
+        </div>
+        <div>
+            <form action="/logout" method="POST">
+                <button type="submit">Logout</button>
+            </form>
+        </div>
+    </div>
+
+    <h1>Admin Panel</h1>
+
+    <h2>Users</h2>
+    <table>
+        <tr>
+            <th>User ID</th>
+            <th>Name</th>
+            <th>Room Number</th>
+            <th>Actions</th>
+        </tr>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.user_id }}</td>
+            <td>{{ user.name }}</td>
+            <td>{{ user.room_number }}</td>
+            <td>
+                <form action="{{ url_for('remove_user', user_id=user.user_id) }}" method="POST" style="display:inline;">
+                    <button type="submit">Remove</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h2>Attendance Records</h2>
+    <table>
+        <tr>
+            <th>Date</th>
+            <th>User ID</th>
+            <th>Name</th>
+            <th>Morning Status</th>
+            <th>Afternoon Status</th>
+            <th>Night Status</th>
+        </tr>
+        {% for record in attendance_records %}
+        <tr>
+            <td>{{ record.date }}</td>
+            <td>{{ record.user_id }}</td>
+            <td>{{ record.name }}</td>
+            <td>{{ record.morning_status }}</td>
+            <td>{{ record.afternoon_status }}</td>
+            <td>{{ record.night_status }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
