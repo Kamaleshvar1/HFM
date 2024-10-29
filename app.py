@@ -8,10 +8,10 @@ import random
 import requests
 from dotenv import load_dotenv
 
-
 app = Flask(__name__)
-app.secret_key = ''  # Change this to a random secret key
+app.secret_key = os.getenv("SECRET_KEY")  # Change this to a random secret key
 load_dotenv()
+
 
 # Connect to SQLite database (or create if it doesn't exist)
 def get_db_connection():
@@ -29,7 +29,7 @@ def login():
         recaptcha_response = request.form['g-recaptcha-response']
 
         # Verify reCAPTCHA
-        secret_key =  os.getenv("RECAPTCHA_KEY") # Replace with your actual secret key
+        secret_key = os.getenv("RECAPTCHA_KEY")  # Replace with your actual secret key
         payload = {
             'secret': secret_key,
             'response': recaptcha_response
@@ -52,6 +52,7 @@ def login():
             return render_template('login.html', error='reCAPTCHA verification failed. Please try again.')
 
     return render_template('login.html')
+
 
 # Logout route
 @app.route('/logout')
@@ -96,11 +97,8 @@ def initialize_db():
                     code_expiry DATETIME
                 )''')
 
-    # Drop attendance table if it exists (for schema changes)
-    cur.execute("DROP TABLE IF EXISTS attendance")
-
     # Create attendance table with updated schema
-    cur.execute('''CREATE TABLE attendance (
+    cur.execute('''CREATE TABLE IF NOT EXISTS attendance (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id TEXT,
                     date DATE,
@@ -110,11 +108,29 @@ def initialize_db():
                     FOREIGN KEY (user_id) REFERENCES users (user_id)
                 )''')
 
+    # Create session_timings table if it doesn't exist
+    cur.execute('''CREATE TABLE IF NOT EXISTS session_timings (
+                    session_name TEXT PRIMARY KEY,
+                    start_time TEXT,
+                    end_time TEXT
+                )''')
+
+    # Add default session timings if they are not set
+    default_timings = [
+        ('morning', '08:00', '12:00'),
+        ('afternoon', '12:00', '14:00'),
+        ('night', '18:30', '21:00')
+    ]
+    for name, start, end in default_timings:
+        cur.execute("INSERT OR IGNORE INTO session_timings (session_name, start_time, end_time) VALUES (?, ?, ?)",
+                    (name, start, end))
+
     conn.commit()
     conn.close()
 
 
-initialize_db()  # Call this function when the application starts
+initialize_db()
+
 
 @app.route('/')
 def home():
@@ -140,7 +156,7 @@ def generate_qr():
     conn.commit()
     conn.close()
 
-    qr_data = f'Attendance for User ID: {user_id}, Code: {unique_code}'
+    qr_data = f'{unique_code}'
 
     # Generate QR code
     qr_img = qrcode.make(qr_data)
@@ -163,58 +179,137 @@ def is_within_time_range(start_time, end_time):
     return start_time <= now <= end_time
 
 
+# Define session timings in a dictionary for easier management and configurability
+
+
+SESSION_TIMINGS = {
+    'morning': (time(8, 0), time(12, 0)),
+    'afternoon': (time(12, 0), time(14, 0)),
+    'night': (time(18, 30), time(21, 0)),
+}
+
+
 @app.route('/mark_attendance', methods=['POST'])
 def mark_attendance():
-    user_id = request.form['user_id']
-    entered_code = request.form['unique_code']
-    date = datetime.now().date()
+    user_id = request.form.get('user_id')
+    entered_code = request.form.get('unique_code')
+    current_date = datetime.now().date()
     current_time = datetime.now().time()
 
-    # Establish a database connection
+    # Connect to the database
     conn = get_db_connection()
     cur = conn.cursor()
 
     # Fetch user details based on user_id
     user = cur.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
 
-    if user:
-        # Check if the entered OTP matches and is within the expiry time
-        code_expiry = datetime.fromisoformat(user["code_expiry"]) if user["code_expiry"] else None
-        if user["unique_code"] == entered_code and (code_expiry and datetime.now() < code_expiry):
+    if not user:
+        return render_template("result.html", message="User ID not found.")
 
-            # Determine the session based on current time
-            if time(8, 0) <= current_time <= time(12, 0):  # Morning session
-                session = 'morning'
-            elif time(12, 00) <= current_time <= time(14, 0):  # Afternoon session
-                session = 'afternoon'
-            elif time(19, 30) <= current_time <= time(21, 0):  # Night session
-                session = 'night'
-            else:
-                message = "Attendance is not available at this time."
-                return render_template("result.html", message=message)
+    # OTP validation
+    if not (user["unique_code"] == entered_code and user["code_expiry"] and datetime.now() < datetime.fromisoformat(
+            user["code_expiry"])):
+        return render_template("result.html", message="Invalid or expired OTP.")
 
-            # Check if attendance is already marked for today in the current session
-            attendance = cur.execute("SELECT * FROM attendance WHERE user_id = ? AND date = ?",
-                                     (user_id, date)).fetchone()
+    # Determine session based on time
+    session = None
+    for sess_name, (start, end) in SESSION_TIMINGS.items():
+        if start <= current_time <= end:
+            session = sess_name
+            break
 
-            if not attendance:
-                # Mark attendance for the user in the current session
-                cur.execute(f"INSERT INTO attendance (user_id, date, {session}_status) VALUES (?, ?, 'present')",
-                            (user_id, date))
-                # Clear the unique_code and code_expiry after successful attendance marking
-                cur.execute("UPDATE users SET unique_code = NULL, code_expiry = NULL WHERE user_id = ?", (user_id,))
-                conn.commit()
-                message = "Attendance marked successfully."
-            else:
-                message = "Attendance already marked for today."
-        else:
-            message = "Invalid or expired OTP."
+    if not session:
+        return render_template("result.html", message="Attendance is not available at this time.")
+
+    # Check if attendance is already marked for today in this session
+    attendance = cur.execute("SELECT * FROM attendance WHERE user_id = ? AND date = ?",
+                             (user_id, current_date)).fetchone()
+
+    if attendance and attendance[f"{session}_status"] == 'present':
+        message = f"Attendance for the {session} session has already been marked today."
     else:
-        message = "User ID not found."
+        # Mark attendance for the user in the current session
+        if attendance:
+            cur.execute(f"UPDATE attendance SET {session}_status = 'present' WHERE user_id = ? AND date = ?",
+                        (user_id, current_date))
+        else:
+            cur.execute(f"INSERT INTO attendance (user_id, date, {session}_status) VALUES (?, ?, 'present')",
+                        (user_id, current_date))
+
+        # Clear the unique_code and code_expiry after successful attendance marking
+        cur.execute("UPDATE users SET unique_code = NULL, code_expiry = NULL WHERE user_id = ?", (user_id,))
+        conn.commit()
+        message = f"Attendance marked successfully for the {session} session."
 
     # Close the database connection
     conn.close()
     return render_template("result.html", message=message)
+
+
+# Function to update session timings in the database
+@app.route('/update_session_timings', methods=['POST'])
+def update_session_timings():
+    morning_start = request.form.get('morning_start')
+    morning_end = request.form.get('morning_end')
+    afternoon_start = request.form.get('afternoon_start')
+    afternoon_end = request.form.get('afternoon_end')
+    night_start = request.form.get('night_start')
+    night_end = request.form.get('night_end')
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Clear old timings
+    cur.execute("DELETE FROM session_timings")
+
+    # Insert new session timings with session_name
+    cur.execute("INSERT INTO session_timings (session_name, start_time, end_time) VALUES (?, ?, ?)",
+                ('morning', morning_start, morning_end))
+    cur.execute("INSERT INTO session_timings (session_name, start_time, end_time) VALUES (?, ?, ?)",
+                ('afternoon', afternoon_start, afternoon_end))
+    cur.execute("INSERT INTO session_timings (session_name, start_time, end_time) VALUES (?, ?, ?)",
+                ('night', night_start, night_end))
+
+    conn.commit()
+    conn.close()
+
+    flash("Session timings updated successfully")
+    return redirect(url_for('session_timings'))
+
+@app.route('/session_timings', methods=['GET', 'POST'])
+def session_timings():
+    if request.method == 'POST':
+        morning_start = request.form['morning_start']
+        morning_end = request.form['morning_end']
+        afternoon_start = request.form['afternoon_start']
+        afternoon_end = request.form['afternoon_end']
+        night_start = request.form['night_start']
+        night_end = request.form['night_end']
+
+        # Update session timings in the database
+        update_session_timings(morning_start, morning_end, afternoon_start, afternoon_end, night_start, night_end)
+
+    # Fetch session timings from the database
+    sessions = fetch_session_timings()
+
+    # Set default values if sessions list is empty
+    if not sessions:
+        sessions = [
+            {'session_name': 'morning', 'start_time': '08:00', 'end_time': '12:00'},
+            {'session_name': 'afternoon', 'start_time': '12:00', 'end_time': '14:00'},
+            {'session_name': 'night', 'start_time': '18:30', 'end_time': '21:00'}
+        ]
+
+    return render_template('session_timings.html', sessions=sessions)
+
+def fetch_session_timings():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT session_name, start_time, end_time FROM session_timings")
+    sessions = cur.fetchall()
+    conn.close()
+    return [{'session_name': session['session_name'], 'start_time': session['start_time'], 'end_time': session['end_time']} for session in sessions]
+
 
 
 # Admin panel to add users
@@ -256,6 +351,7 @@ def admin_panel():
     cur.close()
     return render_template('admin_panel.html', users=users, attendance_status=attendance_status, today=today)
 
+
 @app.route('/users')
 def users_page():
     conn = get_db_connection()
@@ -290,7 +386,6 @@ def attendance_records_page():
     return render_template('attendance_records.html', attendance_records=attendance_records)
 
 
-
 @app.route('/add_user', methods=['GET', 'POST'])
 def add_user():
     if request.method == 'POST':
@@ -323,8 +418,7 @@ def remove_user(user_id):
     conn.close()
     return redirect(url_for('admin_panel'))
 
-if __name__ == '__main__':
-    initialize_db()
 
 if __name__ == '__main__':
+    initialize_db()
     app.run(debug=True)

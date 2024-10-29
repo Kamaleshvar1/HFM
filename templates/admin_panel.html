@@ -120,6 +120,7 @@
             <a href="/admin_panel">Dashboard</a>
             <a href="/attendance_records">Attendance Records</a>
             <a href="/users">Users</a>
+            <a href="/session_timings">Session Timings</a>
         </div>
         <div>
             <form action="/logout" method="POST">
@@ -152,26 +153,26 @@
         {% endfor %}
     </table>
 
-    <h2>Attendance Records</h2>
-    <table>
-        <tr>
-            <th>Date</th>
-            <th>User ID</th>
-            <th>Name</th>
-            <th>Morning Status</th>
-            <th>Afternoon Status</th>
-            <th>Night Status</th>
-        </tr>
-        {% for record in attendance_records %}
-        <tr>
-            <td>{{ record.date }}</td>
-            <td>{{ record.user_id }}</td>
-            <td>{{ record.name }}</td>
-            <td>{{ record.morning_status }}</td>
-            <td>{{ record.afternoon_status }}</td>
-            <td>{{ record.night_status }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+<!--    <h2>Attendance Records</h2>-->
+<!--    <table>-->
+<!--        <tr>-->
+<!--            <th>Date</th>-->
+<!--            <th>User ID</th>-->
+<!--            <th>Name</th>-->
+<!--            <th>Morning Status</th>-->
+<!--            <th>Afternoon Status</th>-->
+<!--            <th>Night Status</th>-->
+<!--        </tr>-->
+<!--        {% for record in attendance_records %}-->
+<!--        <tr>-->
+<!--            <td>{{ record.date }}</td>-->
+<!--            <td>{{ record.user_id }}</td>-->
+<!--            <td>{{ record.name }}</td>-->
+<!--            <td>{{ record.morning_status }}</td>-->
+<!--            <td>{{ record.afternoon_status }}</td>-->
+<!--            <td>{{ record.night_status }}</td>-->
+<!--        </tr>-->
+<!--        {% endfor %}-->
+<!--    </table>-->
 </body>
 </html>
